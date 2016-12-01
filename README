@@ -1,0 +1,243 @@
+The software in this package was written by Steven D. Carroll, Copyright (C) 2006, for the application described in:
+
+Carroll, S., Pavlovic, V.  Protein classification using probabilistic 
+chain graphs and the Gene Ontology structure.  Bioinformatics, Advance 
+Access published on May 16, 2006; doi: doi:10.1093/bioinformatics/btl187
+
+There are two programs that can be compiled:
+1) GraphDriver.cpp, which is entirely similarity-based
+2) GraphDriverPPIsim.cpp, which incorporates both similarity and protein-protein interactions
+
+Both programs incorporate ontological structure into the model.
+
+Compiling:
+---------
+If you type
+g++ GraphDriver.cpp
+the compiled executable will be written to ./a.out
+
+If you type
+g++ GraphDriver.cpp -o gd
+the compiled executable will be written to ./gd
+
+If you type
+g++ GraphDriverPPIsim.cpp -o gdppisim
+the compiled executable will be written to ./gdppisim
+
+Running:
+-------
+Sample input files are included in the input directory (they are not necessarily all mutually consistent).
+
+GraphDriver.cpp:
+  bel_prop mode:
+  -------------
+In this mode, belief propagation is run on an input chain graph, without any distance threshold imposed.  Edges between proteins' corresponding term nodes are based on similarity alone.
+If you type
+./gd bel_prop pgraph.txt gograph.txt annotations.txt gdout.txt status.txt
+then the program will run in bel_prop mode on the input files pgraph.txt, gograph.txt, and annotations.txt.  The output will be written to gdout.txt, and the status of the program can be checked in status.txt.
+Each input and output file can have any name you choose, and may be in a different directory.
+Format of input files:
+  1) pgraph.txt 
+The first line must be the number of proteins to be included in the chain graph.  Each line thereafter corresponds to similarity-based edges between proteins.  For example,
+0 1 0.6
+means that there will be edges created between corresponding term nodes of proteins 0 and 1, and the edges will be created based on a similarity of 0.6.  In its current form, the program assumes a maximum similarity of 1.0.  If you only want, e.g., edges created between proteins with similarity greater than 0.5, then pairs of proteins with similarity less than or equal to 0.5 should not be included in pgraph.txt.  Proteins must be indexed as arrays are, beginning with zero.
+  2) gograph.txt
+The first line must be the number of terms in the ontology/subontology.  Each line thereafter corresponds to one of the terms, and contains a list of parents, followed by the conditional probability of being negative given that all parents are positive.  There must be a line for the root node (node 0), with no parents listed, with the prior probability of being negative.  For example:
+
+2
+0 0.3
+1 0 0.2
+
+represents an ontology with two terms, where term 0 is the root and term 1 is its only child.  The prior probability that term 0 is negative is 0.3, and the conditional probability that term 1 is negative given that term 0 is positive is 0.2.  As with pgraph.txt, terms must be indexed as arrays are indexed, beginning with zero.
+
+Parents must be listed in monotonically increasing order.  For example, the line
+3 1 2 0.25
+would represent that term 3 has terms 1 and 2 as parents, and the probability that 3 is negative, given that both 1 and 2 are positive, is 0.25.
+
+  3) annotations.txt
+Each line in this file corresponds to one protein and all of terms to which it is annotated.  For example, the line:
+3 0 1 3 NOT 5
+represents that protein 3 is positively annotated to terms 0, 1, and 3, and negatively annotated to term 5.  All terms for which there is no annotation, either positive or negative, should be absent from this line.
+
+Format of output files:
+  1) status.txt
+The main data of interest in this file are the iteration number and the maxdiff.  The iteration number tells how many iterations of belief propagation have been run, and at each iteration, the maxdiff tells the maximum difference in messages between successive iterations over all nodes in the chain graph.  Convergence is defined to be the point at which all messages change by less than 0.0001 between successive iterations, so as maxdiff approaches 0.0001, convergence is being approached.  If maxdiff remains constant for a large number of iterations, convergence may not be attainable with the current settings (one possibility is to change the message-passing schedule, see below).
+
+  2) gdout.txt
+This file will contain one line for each term of each protein at which there is not an annotation, either positive or negative.  Each line has three columns, comma separated.  The first column is the protein index, the second is the term index, and the third is the final belief (posterior) that that protein is positive at that term.  For example:
+
+0,0,0.700000
+0,1,0.560000
+1,1,0.800000
+2,0,0.700000
+2,1,0.560000
+
+represents that the belief that protein 0 is positive at term 0 is 0.7, the belief that protein 0 is positive at term 1 is 0.56, etc.
+
+  bel_prop_neigh mode:
+  -------------------
+In this mode, belief propagation is run on an input chain graph, without any distance threshold imposed.
+If you type
+./gd bel_prop_neigh pgraph.txt gograph.txt annotations.txt gdout.txt dijshortest.txt 0.2 status.txt
+then the program will run in bel_prop_neigh mode on the input files pgraph.txt, gograph.txt, annotations.txt, and dijshortest.txt.  The output will be written to gdout.txt, and the status of the program can be checked in status.txt.  In this mode, only proteins within the given distance threshold, 0.2 in the above command, will be considered for belief propagation.  This can decrease running-time, often with no or a minimal detrimental effect on performance.
+Format of input files:
+same as bel_prop mode, except that now dijshortest.txt must be included.
+This file contains one line per protein.  Each line has two columns, space separated.  The first column is the index of the protein, and the second column is the distance to the closest annotated protein, as can be calculated in short_sim mode or short_edg mode (see below) or by any relevant method.  For example:
+
+0 0.19
+1 0.25
+2 0.0
+3 0.6
+
+represents that protein 0 has distance 0.19 to the nearest annotated protein, protein 1 has distance 1, protein 2 has distance 0 (i.e. is annotated itself), and protein 3 has distance 0.6.
+
+  conn_comp mode:
+  --------------
+In this mode, connected components are computed.  For each connected component, only proteins with annotations are written to the output file.  One use for this information is in leave-k-out experiments, where k>1.  If, for example, you want to leave out the annotations of all pairs of proteins, then for two proteins p1 and p2 in separate connected components, if you already have the results of leave-1-out for each, you can conjoin their results for the leave-2-out case, since nodes in separate connected components do not influence one another.
+If you type
+./gd conn_comp pgraph.txt annotatedlist.txt conn_comp.txt status.txt
+then the program will run in conn_comp mode on the input files pgraph.txt and annotatedlist.txt.  The output will be written to conn_comp.txt, and the status of the program can be checked in status.txt.
+Format of input files:
+  1) pgraph.txt
+same as above - the value in the third column is ignored, all that matters is the presence of an edge.
+  2) annotatedlist.txt
+one line per annotated protein, simply the index of the protein.  Note that this is not the same as annotations.txt.
+
+Format of output file:
+  1) conn_comp.txt:
+a sample output is shown below:
+
+CONNECTED COMPONENT (ANNS):
+3
+7
+CONNECTED COMPONENT (ANNS):
+5
+6
+
+This means that there are two connected components that contain annotated proteins.  The first one contains proteins 3 and 7 (which must be in annotatedlist.txt in order to be output), and the second one contains proteins 5 and 6 (also annotated).  The unannotated proteins in each connected component are not written.
+
+  short_sim mode:
+  --------------
+In this mode, a single-source shortest paths algorithm is run using the similarity-based distance defined in Carroll and Pavlovic, 2006.  If you type
+./gd short_sim pgraph.txt dijsh_1.txt 1 status.txt
+then the program will calculate a shortest path, and the distance, between protein 1 and all other proteins, using the similarity-based distance.  The output will be written to dijsh_1.txt.
+Format of input files:
+  1) pgraph.txt
+same as above, with the 3rd column representing similarity
+
+Format of output files:
+  2) dijsh_1.txt
+In this file, there is one line per protein, with a variable number of columns, space-separated.  The last column is always the index of the source protein, and the first column is the destination protein.  The second column contains the distance between the two, and any columns between the second column and the last column trace a shortest path.  For example, if a network has 5 proteins, and short_sim mode is run with protein 3 as the source, and the output is:
+
+0 infinity
+1 infinity
+2 0.500000 3
+3 0.000000
+4 0.750000 2 3
+
+then proteins 0 and 1 are not reachable from protein 3 (infinity is represented by long double's maximum value), the distance between proteins 2 and 3 is 0.5, across a single edge, and the distance between proteins 4 and 3 is 0.75, across two edges, via protein 2.  
+NOTE: In order to construct dijshortest.txt, referenced in bel_prop_neigh mode above, you need to run in short_sim mode for each annotated protein, then for each protein, take the shortest distance to ANY annotated protein by selecting the minimum distance.  Code for this is not included.
+
+  short_edg mode:
+  --------------
+In this mode, a single-source shortest paths algorithm is run using the number of edges as the distance measure.  If you type
+./gd short_edg pgraph.txt dijsh_1.txt 1 status.txt
+then the program will calculate a shortest path, and the distance, between protein 1 and all other proteins, using the number of edges as the distance measure.  The output will be written to dijsh_1.txt.
+Format of input files:
+  1) pgraph.txt
+same as above, where the value in the 3rd column is ignored (all that matters is the existence of an edge)
+
+Format of output files:
+  1) dijsh_1.txt
+Same as above, except that the distance is now in terms of number of edges.
+NOTE: In order to construct dijshortest.txt, referenced in bel_prop_neigh mode above, you need to run in short_edg mode for each annotated protein, then for each protein, take the shortest distance to ANY annotated protein by selecting the minimum distance.  Code for this is not included.
+
+GraphDriverPPIsim.cpp
+---------------------
+If you type
+g++ GraphDriverPPIsim.cpp -o gdppisim
+then the compiled executable will be in ./gdppisim
+In this model, both similarity and protein-protein interactions are incorporated into the model, as described in Carroll and Pavlovic, 2006.
+
+  bel_prop mode:
+  -------------
+In this mode, belief propagation is run on an input chain graph, without any distance threshold imposed.  Edges between proteins' corresponding term nodes are based on both similarity and protein-protein interactions.
+If you type
+./gdppisim bel_prop pgraph.txt gridedges.txt gograph.txt annotations.txt protedgpars.txt gdout_ppisim.txt status_ppisim.txt
+then the program will run in bel_prop mode on the input files pgraph.txt, gridedges.txt, gograph.txt, annotations.txt, and protedgpars.txt.  The output will be written to gdout_ppisim.txt, and the status of the program can be checked in status_ppisim.txt.
+Each input and output file can have any name you choose, and may be in a different directory.
+
+Format of input files:
+  1) pgraph.txt: same as above
+  2) gridedges.txt: same format as pgraph.txt, excluding the first line.  In this case, an edge represents that there is an interaction between the two proteins.  There must be a third column, but the value in that column is ignored.
+  3) gograph.txt: same as above
+  4) annotations.txt: same as above
+  5) protedgpars.txt: one line per term in the input ontology, five columns per line, space-separated.  The first column is the index of the term.  The second column is the probability that two proteins are negative (-,-) at that term given that there is an interaction, the third column is the probability of (-,+) given that there is an interaction, the fourth column is the probability of (+,-) given that there is an interaction, and the fifth column is the probability of (+,+) given that there is an interaction.  Since the designations (-,+) and (+,-) are arbitrary, it is recommended to take the probability that one protein is positive and one is negative given that there is an interaction, and to assign half of that probability to (-,+) and half to (+,-).  (pars stands for parameters, not parents)
+For example, if protedgpars.txt contains:
+
+0 0.1 0.25 0.25 0.4
+1 0.25 0.25 0.25 0.25
+
+then there are two terms in the ontology, and the probability that two proteins are negative at term 0 given that there is an interaction is 0.1, etc.
+
+Format of output files:
+  1) gdout_ppisim.txt: same as gdout.txt above
+
+  bel_prop_neigh mode:
+  -------------------
+This mode is similar to bel_prop_neigh mode in GraphDriver.cpp.  Special consideration should be taken in defining the distance measure, since both similarity and protein-protein interactions define edges.
+sample command:
+./gdppisim bel_prop_neigh pgraph.txt gridedges.txt gograph.txt annotations.txt protedgpars.txt gdout_ppisim_thresh.txt dijshortest.txt 0.2 status_ppisim_thresh.txt
+
+########################################################################
+
+Further notes:
+-------------
+
+  A PPI-based model without similarity:
+  ------------------------------------
+A model based on protein-protein interactions alone, without accounting for similarity between proteins, can be created with GraphDriverPPIsim.cpp by simply entering no edges in pgraph.txt (pgraph.txt must still have the number of proteins in the first line).  
+
+Note: Conversely, a purely similarity-based model can be attained by defining all conditional distributions in  protedgpars.txt to be uniform.  However, this will increase running time relative to using GraphDriver.cpp, as unnecessary edges will be created.
+
+  Convergence threshold:
+  ---------------------
+For both GraphDriver.cpp and  GraphDriverPPIsim.cpp, the convergence threshold is hard-coded in the corresponding Graph header file, either Graph.h or GraphPPIsim.h.  In both cases, the threshold, 0.0001, is in a conditional in the sendmsgsout method.  To change the threshold replace both instances of 0.0001 with a new threshold and recompile.
+
+  Message-passing schedules:
+  -------------------------
+For both GraphDriver.cpp and  GraphDriverPPIsim.cpp, there are several message-passing schedules that can be employed; these are also hard-coded.  In both Graph.h and GraphPPIsim.h, there are two methods that calculate the order in which nodes send messages out:  calcsendorder and calcsendorder2.  calcsendorder employs either the down schedule or the down-up schedule, as described in Carroll and Pavlovic, 2006.  Which one is employed depends on certain lines in the propagate method.  The following two lines:
+
+for(int i=0;i<numreachable;i++)
+  sendmsgsout(sendorder[i],status);
+
+execute a "down", whereas
+
+for(int i=numreachable-1;i>=0;i--)
+  sendmsgsout(sendorder[i],status);
+
+execute an "up".
+
+In both .h files, the following three lines appear:
+
+        //for(int i=numreachable-1;i>=0;i--) //up
+        for(int i=0;i<numreachable;i++) //down again
+          sendmsgsout(sendorder[i],status);
+
+Since the first line is commented out, successive downs are executed.  To employ the "down-up" schedule, uncomment the first line and comment out the second line, and recompile.
+
+calcsendorder2 employs a simple sequential message-passing schedule.  The main advantage of this is that with this schedule, messages from function nodes are explicitly interspersed between messages from term nodes, more often yielding an accurate result.  For each term node, there is a function node that represents the conditional probability function for that node given its parents.  In the case of a root term node, the function node represents the prior.  In this implementation, all term nodes are indexed with odd numbers, and function nodes with even numbers.  Thus a sequential schedule is also an interspersed schedule, in the sense described above.
+The function nodes are introduced so that the entire chain graph can be internally represented as an equivalent Markov Random Field.  Each protein's Bayesian Network is converted to an equivalent Markov Random Field, as described in 
+Yedidia,J.S., Freeman,W.T. and Weiss,Y. Understanding belief propagation and its generalizations. Technical Report TR2001-22, Mitsubishi Electric Research Labs, January 2002. 
+
+  Checkpointing:
+  -------------
+Four methods are included for checkpointing, in case of a crash.  In order to include this functionality, writesendorder must be called after calcsendorder, and writemsgs must be called after each iteration of message-passing.  In case of a crash, then, readsendorder and readmsgs can be called before calling propagate again.
+
+  Array sizes:
+  -----------
+In readGraph2, maximum array sizes are assumed, generally set at 1000.  If, for example, there are more than 999 annotations for a given protein in annotations.txt, this assumption will be violated, in which case you will encounter an error and have to change the declared array size.
+
+  Computing a marginal distribution
+  ---------------------------------
+The method computemarg, in Graph.h only, calculates all joint probabilities and marginalizes, so that you can compare with the resuts of belief propagation.  Of course, you can only feasibly execute this method on a relatively small graph.  The method assumes that the input graph has 16 nodes.
